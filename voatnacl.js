@@ -370,3 +370,5 @@ return {
   CryptoJS: CryptoJS,
   voatNacl: voatNacl
 }
+
+
