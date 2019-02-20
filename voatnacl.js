@@ -1,4 +1,4 @@
-// voatNacl v0.1.0-alpha
+// voatNacl v0.1.2-alpha
 // Use nacl to encrypt/decrypt and sign/verify messages and posts on voat.co
 //
 // Copyright (c) 2019 realrasengan on voat.co
@@ -25,36 +25,30 @@
 //
 // This software is UNAUDITED.  Use it at your own risk.
 //
-// Uses:
 //
-// voatNacl.haveUserPubkey(user)
-// - Returns [true] or [false] depending on if we have [user]'s pubkey saved in localStorage
+// voatNacl.signMessage(message).then((return_value) => {
+// - Returns signature signed with publickey in [return_value]
 //
-// voatNacl.getUserPubkey(user)
-// - Returns [user]'s pubkey or [null] depending on if we have [user]'s pubkey saved in localStorage
-//
-// voatNacl.saveUserPubkey(user).then((return_value) => {
-// - Saves [user]'s pubkey
-// - Provides in asynchronously the value in [return_value]
-//
-// voatNacl.signMessage(message)
-// - Returns [message] in a signed format ($$$base64encoded-signed-message\n\nmessage)
-//
-// voatNacl.verifyMessage(message,user).then((return_value) => {
+// voatNacl.verifyMessage(message,user).then((return_value) => {  //
 // - Returns [message] without signature in [return_value] if it is a valid signed message by [user] or [return_value=null]
 //
 // voatNacl.encryptMessage(message,user).then((return_value) => {
-// - Returns [message] encrypted in [return_value] with [user]'s pubkey
+// - Returns {"nonce":NONCE,"message":ENCRYPTEDMSG} in [return_value]
 //
 // voatNacl.decryptMessage(message,user).then((return_value) => {
 // - Returns [message] decrypted in [return_value] or [return_value=null] with [user]'s pubkey
 //
+// Optional:
+//
+// voatNacl._signMessage(message, privatekey)
+// voatNacl._verifyMessage(message, target_publickey)
+// voatNacl._encryptMessage(message, target_publickey, privatekey)
+// voatNacl._decryptMessage(message, nonce, target_publickey, privatekey)
+//
 // TODO: Add error checking.
 //
 
-(function(voatNacl) {
-  'use strict';
-
+var voatNacl = (function() {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //
   // GLOBAL PRIVATE VARIABLES
@@ -66,8 +60,6 @@
   // keys for nacl sign/enc/decrypt
   var privatekey = null;
   var publickey = null;
-  var DH_privatekey = null;
-  var DH_publickey = null;
 
   // keys for voat to encrypt the privkey in localStorage (should hide privkey from other scripts)
   var voat_privatekey = null;
@@ -156,10 +148,6 @@
               }
             });
 
-            // Generate DH Keys
-            DH_publickey = ed2curve.convertPublicKey(publickey);
-            DH_privatekey = ed2curve.convertSecretKey(privatekey);
-
             // Encrypt Key with Voat Key
             var _nonce = nacl.randomBytes(nacl.box.nonceLength);
             var _voat_encrypted = nacl.box(nacl.util.decodeUTF8(nacl.util.encodeBase64(privatekey)),_nonce,voat_DH_publickey,voat_DH_privatekey);
@@ -176,8 +164,6 @@
             // Save keys to memory
             publickey = _keys.publicKey;
             privatekey = nacl.util.decodeBase64(_decrypted);
-            DH_publickey = ed2curve.convertPublicKey(publickey);
-            DH_privatekey = ed2curve.convertSecretKey(privatekey);
 
             // Encrypt Key with Voat Key
             var _voat_encrypted = nacl.box(nacl.util.decodeUTF8(_decrypted),_nonce,voat_DH_publickey,voat_DH_privatekey);
@@ -196,8 +182,6 @@
         // Save keys to memory
         publickey = _keys.publicKey;
         privatekey = _keys.secretKey;
-        DH_publickey = ed2curve.convertPublicKey(publickey);
-        DH_privatekey = ed2curve.convertSecretKey(privatekey);
       }
     });
   });
@@ -225,46 +209,41 @@
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //
-  // PRIVATE NACL FUNCTIONS
+  // RAW NACL FUNCTIONS FOR USE WITH ACTUAL PRIVATE OR PUBLiC KEYS
   //
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  // purpose: verifies message with pubkey and returns words or null if it's not validly signed
-  var _verifyMessage = function(voatnacl_msg, pubkey) {
-    var _pattern=/\$\$\$(.+?(?=\n))\n\n(.+)/s;
-    var _res=_pattern.exec(voatnacl_msg);
+  // purpose: sign a message using a private key and return signature
+  var _signMessage = function(msg, privkey) {
+     return nacl.util.encodeBase64(nacl.sign(nacl.util.decodeUTF8(msg),privkey));
+  }
+  
+  // purpose: verifies signature with pubkey and returns original message or null if it's not validly signed
+  var _verifyMessage = function(msg, pubkey) {
     var _returnv = null;
-    if(_res) {
-      if (_res.length>1) {
-        return ((_returnv = nacl.sign.open(nacl.util.decodeBase64(_res[1]),nacl.util.decodeBase64(pubkey))) ? decoder.decode(_returnv) : null);
-      }
-    }
+ 
+    return ((_returnv = nacl.sign.open(nacl.util.decodeBase64(msg),nacl.util.decodeBase64(pubkey))) ? decoder.decode(_returnv) : null);
   }
 
-  // purpose: encrypts message with pubkey and returns encrypted message in the format:
-  // $$$E$$$NONCE$$$MESSAGE
-  var _encryptMessage = function(msg, pubkey) {
+  // purpose: encrypts and returns a voatnacl encrypted message in this format:
+  // {"nonce":NONCE,"message":MESSAGE}
+  var _encryptMessage = function(msg, pubkey, privkey) {
     var _nonce = nacl.randomBytes(nacl.box.nonceLength);
     var _target_DH_pubkey = ed2curve.convertPublicKey(nacl.util.decodeBase64(pubkey));
-
-    return "$$$E$$$"+nacl.util.encodeBase64(_nonce)+"$$$"+nacl.util.encodeBase64(nacl.box(nacl.util.decodeUTF8(msg),_nonce,_target_DH_pubkey,DH_privatekey));      
+    
+    return {
+      "nonce":nacl.util.encodeBase64(_nonce),
+      "message":nacl.util.encodeBase64(nacl.box(nacl.util.decodeUTF8(msg),_nonce,_target_DH_pubkey,ed2curve.convertSecretKey(privkey)))      
+    }
   }
 
   // purpose: decrypts message with pubkey and returns decrypted message
-  var _decryptMessage = function(voatnacl_enc_msg, pubkey) {
-    var _pattern = /\$\$\$E\$\$\$(.+?(?=\$\$\$))\$\$\$(.+)/;
-    var _res=_pattern.exec(voatnacl_enc_msg);
-    var _returnv = null;
+  var _decryptMessage = function(msg, nonce, pubkey, privkey) {
+    var _nonce = nacl.util.decodeBase64(nonce);
+    var _msg = nacl.util.decodeBase64(msg);
+    var _target_DH_pubkey = ed2curve.convertPublicKey(nacl.util.decodeBase64(pubkey));
 
-    if(_res) {
-      if(_res.length>1) {
-        var _nonce = nacl.util.decodeBase64(_res[1]);
-        var _msg = nacl.util.decodeBase64(_res[2]);
-        var _target_DH_pubkey = ed2curve.convertPublicKey(nacl.util.decodeBase64(pubkey));
-
-        return decoder.decode(nacl.box.open(_msg,_nonce,_target_DH_pubkey,DH_privatekey));
-      }
-    }
+    return decoder.decode(nacl.box.open(_msg,_nonce,_target_DH_pubkey, ed2curve.convertSecretKey(privkey)));
   }
 
 
@@ -275,17 +254,17 @@
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   // purpose: check if we have the user pubkey (true or false)
-  voatNacl.haveUserPubkey = function(user) {
+  var haveUserPubkey = function(user) {
      return (window.localStorage.getItem("voatnacl_pubkey_"+user) ? true : false);
   }
 
   // purpose: returns user's pubkey, or returns null
-  voatNacl.getUserPubkey = function(user) {
+  var getUserPubkey = function(user) {
      return window.localStorage.getItem("voatnacl_pubkey_"+user);
   }
 
   // purpose: saves a user's pubkey and returns it
-  voatNacl.saveUserPubkey = async function(user) {
+  var saveUserPubkey = async function(user) {
     if(!voatNacl.haveUserPubkey(user)) {
       var _n=null;
       var _x = await promiseApiGet('/api/v1/u/'+user+'/info').then(function(_y) {
@@ -308,67 +287,77 @@
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //
-  // PUBLIC NACL FUNCTIONS
+  // PUBLIC NACL FUNCTIONS FOR USE WITH VOAT USERNAMES
   //
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  // purpose: returns a voatnacl signed message in this format:
-  // $$$SIGNATURE
-  //
-  // MESSAGE
-  voatNacl.signMessage = function(msg) {
-    return "$$$"+nacl.util.encodeBase64(nacl.sign(nacl.util.decodeUTF8(msg),privatekey))+"\n\n"+msg;
+  // purpose: returns a voatnacl signed message signature.
+  var signMessage = async function(msg) {
+    return _signMessage(msg,privatekey);      
   }
 
   // purpose: verifies signed msg with username, returns words or null if it's invalidly signed
-  voatNacl.verifyMessage = async function(voatnacl_msg, user) {
+  var verifyMessage = async function(msg, user) {
     var _temp = null;
     if(!voatNacl.haveUserPubkey(user)) {
       await voatNacl.saveUserPubkey(user).then(function(value){
         _temp=value;
       });
-      return _verifyMessage(voatnacl_msg,_temp);
+      return _verifyMessage(msg,_temp);
     }
     else {
-      return _verifyMessage(voatnacl_msg,voatNacl.getUserPubkey(user));
+      return _verifyMessage(msg,voatNacl.getUserPubkey(user));
     }
-
   }
 
   // purpose: encrypts and reutrns a voatnacl encrypted message in this format:
-  // $$$E$$$NONCE$$$MESSAGE
-  voatNacl.encryptMessage = async function(msg, user) {
+  // {"nonce":NONCE,"message":MESSAGE}
+  var encryptMessage = async function(msg, user) {
       var _temp = null;
       if(!voatNacl.haveUserPubkey(user)) {
         await voatNacl.saveUserPubkey(user).then(function(value){
           _temp=value;
         });
-        return _encryptMessage(msg,_temp);
+        return _encryptMessage(msg,_temp,privatekey);
       }
       else {
-        return _encryptMessage(msg,voatNacl.getUserPubkey(user));
+        return _encryptMessage(msg,voatNacl.getUserPubkey(user),privatekey);
       }
   }
 
-  // purpose: Decrypts a voatnacl encrypted message and returns the msg or null if it fails
-  voatNacl.decryptMessage = async function(voatnacl_enc_msg, user) {
-      var _temp = null;
-      if(!voatNacl.haveUserPubkey(user)) {
-        await voatNacl.saveUserPubkey(user).then(function(value){
-          _temp=value;
-        });
-        return _decryptMessage(voatnacl_enc_msg,_temp);
-      }
-      else {
-        return _decryptMessage(voatnacl_enc_msg,voatNacl.getUserPubkey(user));
-      }
+  // purpose: Decrypts an encrypted msg with nonce by user
+  var decryptMessage = async function(msg, nonce, user) {
+    var _temp = null;
+    if(!voatNacl.haveUserPubkey(user)) {
+      await voatNacl.saveUserPubkey(user).then(function(value){
+        _temp=value;
+      });
+      return _decryptMessage(msg, nonce,_temp,privatekey);
+    }
+    else {
+      return _decryptMessage(msg, nonce,voatNacl.getUserPubkey(user),privatekey);
+    }
   }
-
-})(typeof module !== 'undefined' && module.exports ? module.exports : (self.voatNacl = self.voatNacl || {}));
+  
+  return {
+    haveUserPubkey: haveUserPubkey,
+    getUserPubkey: getUserPubkey,
+    saveUserPubkey: saveUserPubkey,
+    /* */
+    signMessage: signMessage,
+    verifyMessage: verifyMessage,
+    encryptMessage: encryptMessage,
+    decryptMessage: decryptMessage,
+    /* */
+    _signMessage: _signMessage,
+    _verifyMessage: _verifyMessage,
+    _encryptMessage: _encryptMessage,
+    _decryptMessage: _decryptMessage
+  }
+})();
 
 return {
   CryptoJS: CryptoJS,
   voatNacl: voatNacl
 }
-
 
