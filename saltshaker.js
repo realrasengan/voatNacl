@@ -35,10 +35,15 @@ var SaltShaker = (function() {
   var _decoder = new TextDecoder();
 
   // Function:  create
-  // Purpose:   creates a keypair
+  // Purpose:   creates a keypair (optionally from privatekey)
   // Returns:   {"publickey":publickey,"privatekey":privatekey}
-  var create = function() {
-    var _keys = nacl.sign.keyPair();
+  var create = function(privatekey) {
+    var _keys = null;
+    
+    if(privatekey)
+      _keys = nacl.sign.keyPair.fromSecretKey(nacl.util.decodeBase64(privatekey));
+    else
+      _keys = nacl.sign.keyPair();
     return {
       "publickey":nacl.util.encodeBase64(_keys.publicKey),
       "privatekey":nacl.util.encodeBase64(_keys.secretKey)
