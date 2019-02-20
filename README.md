@@ -1,17 +1,35 @@
 # voatNacl
-Use nacl to encrypt/decrypt and sign/verify messages and posts on voat.co
+Use [SaltShaker]!(https://github.com/realrasengan/SaltShaker) (nacl, AES) to encrypt/decrypt and sign/verify messages and posts on voat.co
 
 This is a voat package using voat's new packaging system.  I've been playing around with it, and it seems really cool!
 
 
-## Thanks to
+## How
+1. Import SaltShaker on the voat package system at a lower priority [load earlier]
+2. Import voatNacl on the voat package system at a higher priority [load later]
 
-- https://github.com/dchest/tweetnacl-js
+## How to use
 
-- https://github.com/dchest/tweetnacl-util-js
+```
+voatNacl.sign("msg").then((r) => { console.log(r) });
+= Signs with your pubkey.
+= Returns signature
 
-- https://code.google.com/archive/p/crypto-js/
+voatNacl.verify("msg","user").then((r) => { console.log(r) });
+= Gets user's pubkey and verifies if they signed msg
+= Returns msg if so, or null
 
-- https://github.com/dchest/ed2curve-js
+voatNacl.encrypt("msg","user").then((r) => { console.log(r) });
+= Encrypts a msg with user's pubkey and your privkey
+= Returns a JSON obj with message (encrypted) and nonce.
 
+voatNacl.decrypt("msg","nonce","user").then((r) => { console.log(r) });
+= Decrypts an encrypted msg with given nonce and user's pubkey
+= Returns the msg unencrypted
+
+```
+
+## License
+
+Copyright (c) 2019 realrasengan
 
