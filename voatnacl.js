@@ -26,7 +26,7 @@
 //
 // THIS SOFTWARE IS UNAUDITED.  USE AT YOUR OWN RISK.
 
-var voatNacl = (function() {
+(function(voatNacl)  {
 
   var username = null;    // current user
   var keys = null;        // current user's keys
@@ -74,7 +74,7 @@ var voatNacl = (function() {
           }
           if(!result.data) {
             // Encrypt Key with AES symmetric key (password)
-            var _encrypted = CryptoJS.AES.encrypt(nacl.util.encodeBase64(keys.privatekey), _enc).toString();
+            var _encrypted = CryptoJS.AES.encrypt(keys.privatekey, _enc).toString();
 
             // Save Key to State
             state.save("voatnacl_encprivatekey",'{"key":"'+_encrypted+'"}',function(result) {
@@ -107,7 +107,7 @@ var voatNacl = (function() {
           }
           else {
             // Decrypt Key and recreate key pair
-            var keys = SaltShaker.create(CryptoJS.AES.decrypt(result.data.key, _enc).toString(CryptoJS.enc.Utf8));
+            keys = SaltShaker.create(CryptoJS.AES.decrypt(result.data.key, _enc).toString(CryptoJS.enc.Utf8));
 
             // Save Voat Encrypted Key to Local Storage
             window.localStorage.setItem("voatnacl_" + username, JSON.stringify(SaltShaker.encrypt(keys.privatekey ,voat_keys.publickey,voat_keys.privatekey)));
@@ -148,12 +148,12 @@ var voatNacl = (function() {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   // purpose: check if we have the user pubkey (true or false)
-  var haveUserPubkey = function(user) {
+  voatNacl.haveUserPubkey = function(user) {
     return (window.localStorage.getItem("voatnacl_pubkey_"+user) ? true : false);
   }
 
   // purpose: saves a user's pubkey and returns it
-  var getUserPubkey = async function(user) {
+  voatNacl.getUserPubkey = async function(user) {
     if(!voatNacl.haveUserPubkey(user)) {
       var _pubkey=null;
       await promiseApiGet('/api/v1/u/'+user+'/info').then(function(_result) {
@@ -179,14 +179,14 @@ var voatNacl = (function() {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   // purpose: returns a voatnacl signed message signature.
-  var sign = async function(msg) {
+  voatNacl.sign = async function(msg) {
     return SaltShaker.sign(msg,keys.privatekey);      
   }
 
   // purpose: verifies signed msg with username, returns words or null if it's invalidly signed
-  var verify = async function(msg, user) {
+  voatNacl.verify = async function(msg, user) {
     var _temp = null;
-    await getUserPubkey(user).then(function(value){
+    await voatNacl.getUserPubkey(user).then(function(value){
       _temp=value;
     });
     return SaltShaker.verify(msg,_temp);
@@ -194,30 +194,21 @@ var voatNacl = (function() {
 
   // purpose: encrypts and reutrns a voatnacl encrypted message in this format:
   // {"nonce":NONCE,"message":MESSAGE}
-  var encrypt = async function(msg, user) {
+  voatNacl.encrypt = async function(msg, user) {
     var _temp = null;
-    await getUserPubkey(user).then(function(value){
+    await voatNacl.getUserPubkey(user).then(function(value){
       _temp=value;
     });
     return SaltShaker.encrypt(msg,_temp,keys.privatekey);
   }
 
   // purpose: Decrypts an encrypted msg with nonce by user
-  var decrypt = async function(msg, nonce, user) {
+  voatNacl.decrypt = async function(msg, nonce, user) {
     var _temp = null;
-    await getUserPubkey(user).then(function(value){
+    await voatNacl.getUserPubkey(user).then(function(value){
       _temp=value;
     });
     return SaltShaker.decrypt(msg, nonce,_temp,keys.privatekey);
   }
-  
-  return {
-    keys: keys,
-    sign: sign,
-    verify: verify,
-    encrypt: encrypt,
-    decrypt: decrypt,
-    haveUserPubkey: haveUserPubkey,
-    getUserPubkey: getUserPubkey
-  }
-})();
+
+})(typeof module !== 'undefined' && module.exports ? module.exports : (self.voatNacl = self.voatNacl || {}));
