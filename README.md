@@ -27,6 +27,37 @@ voatNacl.decrypt("msg","nonce","user").then((r) => { console.log(r) });
 = Decrypts an encrypted msg with given nonce and user's pubkey
 = Returns the msg unencrypted
 
+voatNacl.getUserPubkey("user")
+= Gets their pubkey either from the voat page or from the localstorage
+= Returns the pubkey
+
+voatNacl.haveUserPubkey("user")
+= Checks if we have the pubkey
+= Returns true or false
+
+```
+
+## Examples
+
+```
+
+// sign and verify
+voatNacl.sign("What's going on?").then((r) => {
+  console.log(r);
+  voatNacl.verify(r,"yourusername").then((r) => {
+    console.log(r);
+  });
+});
+
+// encrypt and decrypt
+voatNacl.encrypt("What's going on?","yourusername").then((r) => {
+  console.log(r);
+  voatNacl.decrypt(r.message,r.nonce,"yourusername").then((r) => {
+    console.log(r);
+  });
+});
+
+
 ```
 
 ## License
