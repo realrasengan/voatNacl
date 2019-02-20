@@ -60,6 +60,24 @@ voatNacl.encrypt("What's going on?","yourusername").then((r) => {
 
 ```
 
+## Deleting
+
+Local Storage
+```
+window.localStorage.removeItem("voatnacl_pubkey_yourusername");
+window.localStorage.removeItem("voatnacl_yourusername");
+
+```
+
+State
+
+```
+
+state.delete("voatnacl_encprivatekey");
+state.delete("voatnacl_voatprivatekey");
+
+```
+
 ## License
 
 Copyright (c) 2019 realrasengan
