@@ -1,6 +1,6 @@
-// voatNacl v0.1.2-alpha
+// voatNacl v0.1.7-alpha
 //
-// Use SaltShaker (nacl, aes) to encrypt/decrypt and sign/verify messages and posts on voat.co
+// Use SaltShaker (nacl) to encrypt/decrypt and sign/verify messages and posts on voat.co
 //
 // Copyright (c) 2019 realrasengan
 //
@@ -79,10 +79,10 @@
           }
           if(!result.data) {
             // Encrypt Key with AES symmetric key (password)
-            var _encrypted = SaltShaker.AESencrypt(keys.privatekey, _enc);
+            var _encrypted = SaltShaker.encryptPSK(keys.privatekey, _enc);
 
             // Save Key to State
-            state.save("voatnacl_encprivatekey",'{"key":"'+_encrypted+'"}',function(result) {
+            state.save("voatnacl_encprivatekey",'{"key":"'+_encrypted.message+'","nonce":"'+_encrypted.nonce+'"}',function(result) {
               if(!result.success)
                 console.log("Failed to save encrypted private key to voat state");
             });
@@ -112,7 +112,7 @@
           }
           else {
             // Decrypt Key and recreate key pair
-            keys = SaltShaker.create(SaltShaker.AESdecrypt(result.data.key, _enc));
+            keys = SaltShaker.create(SaltShaker.decryptPSK(result.data.key, _enc, result.data.nonce));
 
             // Save Voat Encrypted Key to Local Storage
             window.localStorage.setItem("voatnacl_" + username, JSON.stringify(SaltShaker.encrypt(keys.privatekey ,voat_keys.publickey,voat_keys.privatekey)));
