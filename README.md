@@ -5,9 +5,17 @@ This is a voat package using voat's new packaging system.  I've been playing aro
 
 
 ## How
-1. Import SaltShaker on the voat package system at a lower priority [load earlier]
-2. Import voatNacl on the voat package system at a higher priority [load later]
+1. Add metadata dependencies like this:
 
+```
+
+{
+  "dependencies": {
+    "u-realrasengan-nacl": "0.1.7"
+  }
+}
+
+```
 ## How to use
 
 ```
