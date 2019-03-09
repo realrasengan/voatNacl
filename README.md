@@ -88,5 +88,5 @@ state.delete("voatnacl_voatprivatekey");
 
 ## License
 
-Copyright (c) 2019 realrasengan
+Copyright (c) 2019 realrasengan, PuttItOut
 

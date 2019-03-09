@@ -1,8 +1,8 @@
-// voatNacl v0.1.9-alpha
+// voatNacl v0.1.11-alpha
 //
 // Use SaltShaker (nacl) to encrypt/decrypt and sign/verify messages and posts on voat.co
 //
-// Copyright (c) 2019 realrasengan
+// Copyright (c) 2019 realrasengan, PuttItOut
 //
 // This is free and unencumbered software released into the public domain.
 //
@@ -61,7 +61,20 @@
         // else create keys from previous private key
         voat_keys = SaltShaker.create(result.data.key);
       }
-
+	  //LOOOOOOK HERE
+      //turn off local access on the state object so we always go to the server (this is a hack)
+      state.bypassLocalStorage = true;
+      state.get('server-state-valid', function (result) {
+        if (!result.data){
+        	//server state was purged so remove local key (this is for testing)
+        	window.localStorage.removeItem("voatnacl_" + username);
+        }
+        //set the flag on the server that we have dealt with the state purge
+		state.merge('server-state-valid', {"valid": true}); //don't care about the response, just want to set something
+      	//turn back on local state (this is a hack)
+        state.bypassLocalStorage = false;
+        
+        
       // Load Secret Key from Local Storage
       var _temp_privatekey = null;
       if(!(_temp_privatekey=window.localStorage.getItem("voatnacl_" + username))) {
@@ -126,6 +139,7 @@
         initUI();
       }
     });
+  });
   });
   
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
