@@ -1,4 +1,4 @@
-// voatNacl v0.1.7-alpha
+// voatNacl v0.1.9-alpha
 //
 // Use SaltShaker (nacl) to encrypt/decrypt and sign/verify messages and posts on voat.co
 //
@@ -36,7 +36,7 @@
   var username = null;    // current user
   var keys = null;        // current user's keys
   var voat_keys = null;   // voat's keys for current user
-
+  
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //
   // INITIALIZATION
@@ -116,17 +116,17 @@
 
             // Save Voat Encrypted Key to Local Storage
             window.localStorage.setItem("voatnacl_" + username, JSON.stringify(SaltShaker.encrypt(keys.privatekey ,voat_keys.publickey,voat_keys.privatekey)));
+            initUI();
           }
         });
       }
       else {
         // Decrypt Key with Voat Key and regenerate pubkey pair
         keys = SaltShaker.create(SaltShaker.decrypt(JSON.parse(_temp_privatekey).message, JSON.parse(window.localStorage.getItem("voatnacl_"+username)).nonce, voat_keys.publickey, voat_keys.privatekey));
+        initUI();
       }
     });
   });
-
-  
   
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   //
@@ -223,4 +223,167 @@
     return SaltShaker.decrypt(msg, nonce,_temp,keys.privatekey);
   }
 
+  
+    // Decryption/Encryption Functions
+  var composeEncrypt = function() {
+    var _location=window.location.pathname;
+    if (_location == "/messages/compose") {
+      var encrypted=false;
+
+      $('input:submit').on('click', function(e) {      
+        if(encrypted) {
+          encrypted=false;
+          return;
+        }
+        else {
+          var target = $('#Recipient')[0].value;
+          var subject = $('#Subject')[0].value;
+          var body = $('#Body')[0].value;
+
+          if(!(target.length==0 || body.length==0)) {
+            console.log("Encrypting for "+target);
+            voatNacl.encrypt(body,target).then((r) => {
+              body='$$$'+r.message+'$$$'+r.nonce+'$$$';
+              $('#Body')[0].value=body;
+              encrypted=true;
+              $(this).trigger('click');
+            });
+            return false;
+          }
+        }
+      });
+    }
+  }
+  
+  var pmDecrypt = async function() {
+    var _location=window.location.pathname;
+    if (_location == "/messages/private"
+      ||_location == "/messages/index") {
+      var messages = $('#messageContainer').children('div');
+
+      for(i = 0;i < messages.length;i++) {
+        var sender = $('#'+messages[i].id+' > .panel > .panel-heading')[0].innerText.match(/([^\s]+) \>.*/)[1];
+        var title = $('#'+messages[i].id+' > .panel > .panel-heading-messagetitle')[0].innerText;
+        var message = $('#'+messages[i].id+' > .panel > .panel-message-body')[0].innerText.split('\n');
+        message.splice(message.length-2,2);
+        message=message.join('\n');
+
+        var _message=message.match(/\$\$\$(.+?(?=\$\$))\$\$\$(.+?(?=\$\$))\$\$\$/);
+        if(!_message)
+          continue;
+        else {
+          nonce=_message[2];
+          message=_message[1];
+
+          var _html = $('#'+messages[i].id+' > .panel > .panel-message-body')[0].innerHTML;
+          var _temp;
+
+          await voatNacl.decrypt(message,nonce,sender).then((r) => {
+            _temp=r;
+            _html = "<b>Decrypted:</b> " + _temp + "<br>" + _html;
+          });
+          $('#'+messages[i].id+' > .panel > .panel-message-body')[0].innerHTML=_html;
+        }
+      }
+    }
+  }
+  
+  var replyComposeEncrypt = function() {
+    var _location=window.location.pathname;
+    if (_location == "/messages/private"
+      ||_location == "/messages/index") { 
+        
+      $('#submitbutton')[0].onclick = null;
+
+      $('#submitbutton').on('click', function(e) {
+        e.preventDefault();
+      });
+      var previousSubmitReplyForm = window.submitReplyForm;
+
+      window.submitReplyForm = function(sender) {
+        sender = $(sender);
+        var contentControl = sender.parents('form').find('#Content');
+        var target = $('#'+sender.parents('div')[2].id+' > .panel > .panel-heading')[0].innerText.match(/([^\s]+) \>.*/)[1];
+        var body;
+        
+        var content = contentControl.val();
+        var encryptedContent = voatNacl.encrypt(content,target).then((r) => {
+          body='$$$'+r.message+'$$$'+r.nonce+'$$$';
+          contentControl.val(body);            
+          previousSubmitReplyForm(sender);
+        });
+      };
+    }
+  }
+  
+  var replyComposeSign = function() {
+   var _location=window.location.pathname;
+    if (_location != "/messages/private"
+      &&_location != "/messages/index") { 
+      $('#submitbutton')[0].onclick = null;
+
+      $('#submitbutton').on('click', function(e) {
+        e.preventDefault();
+      });
+      var previousSubmitReplyForm = window.submitReplyForm;
+      window.submitReplyForm = function(sender) {
+        sender = $(sender);
+
+        var contentControl = sender.parents('form').find('#Content');
+        var content = contentControl.val();
+        voatNacl.sign(content).then((r) => {
+          contentControl.val(content+"\n\n$S$"+r);
+          previousSubmitReplyForm(sender);
+        });
+      };
+    }
+  }
+  
+  var msgVerify = async function() {
+    var _location=window.location.pathname;
+    if (_location != "/messages/private") {
+      var messages = $('.comment');
+      
+      for(i = 0;i < messages.length;i++) {
+        var id = messages[i].className.split(' ')[1].split('-')[1];
+        
+        var sender = $('.id-'+id)[0].innerText.match(/[^\s]+ ([^\s]+) .+/)[1];
+        var message = $('#commentContent-'+id)[0];
+        if(!message)
+          continue;
+        
+        message=message.innerText;
+         
+        var _message=message.match(/(.+?(?=\n\n\$S\$))\n\n\$S\$(.+)/);
+        if(!_message)
+          continue;
+        else {
+          signature=_message[2];
+          message=_message[1];
+
+          var _html = $('#commentContent-'+id)[0].innerHTML;
+          var _temp;
+
+
+          await voatNacl.verify(signature,sender).then((r) => {
+            if(r==message) {
+              _html=_html.replace("$S$"+signature,"<b>VERIFIED</b>");
+            }
+          });
+          $('#commentContent-'+id)[0].innerHTML=_html;
+        }
+      }
+    }
+  }
+  $('.inline-loadcomments-btn').click(function(){
+    setTimeout(msgVerify,1000);
+  });
+  
+  var initUI = function() {
+    pmDecrypt();
+    composeEncrypt();
+    replyComposeEncrypt();
+    replyComposeSign();  
+    msgVerify();
+  }
 })(typeof module !== 'undefined' && module.exports ? module.exports : (self.voatNacl = self.voatNacl || {}));
